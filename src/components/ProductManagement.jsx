@@ -146,6 +146,26 @@ export default function ProductManagement({ products = [], onRefresh }) {
       // Default to luxury curated linen fallback if no photo was uploaded or pasted
       const finalImage = formData.image?.trim() || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=600';
 
+      // Ensure all color variants have the product image and views set
+      const formattedColors = (formData.colors || []).map(c => {
+        const colorImg = c.image || finalImage;
+        return {
+          ...c,
+          name: c.name || 'Default',
+          code: c.hex || c.code || '#FFFFFF',
+          hex: c.hex || c.code || '#FFFFFF',
+          stock: Number(c.stock !== undefined ? c.stock : 10),
+          image: colorImg,
+          views: c.views && c.views.length > 0 ? c.views : [
+            { name: "Front View", url: colorImg },
+            { name: "Back Side", url: colorImg },
+            { name: "Left Side View", url: colorImg },
+            { name: "Button View", url: colorImg },
+            { name: "Right Side View", url: colorImg }
+          ]
+        };
+      });
+
       const payload = {
         title: formData.title.trim(),
         category: formData.category || 'Linen Shirts',
@@ -155,7 +175,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
         badge: formData.badge?.trim() || null,
         description: formData.description?.trim() || '',
         sizes: formData.sizes && formData.sizes.length > 0 ? formData.sizes : ['S', 'M', 'L', 'XL'],
-        colors: formData.colors || [],
+        colors: formattedColors,
         is_active: formData.is_active ?? true
       };
 
