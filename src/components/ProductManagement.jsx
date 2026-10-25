@@ -134,8 +134,8 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.price || !formData.image) {
-      setStatusMessage({ type: 'error', text: 'Title, price, and garment image are required.' });
+    if (!formData.title || !formData.price) {
+      setStatusMessage({ type: 'error', text: 'Title and price are required.' });
       return;
     }
 
@@ -143,17 +143,20 @@ export default function ProductManagement({ products = [], onRefresh }) {
     setStatusMessage({ type: '', text: '' });
 
     try {
+      // Default to luxury curated linen fallback if no photo was uploaded or pasted
+      const finalImage = formData.image?.trim() || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=600';
+
       const payload = {
         title: formData.title.trim(),
-        category: formData.category,
+        category: formData.category || 'Linen Shirts',
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock, 10) || 0,
-        image: formData.image.trim(),
+        image: finalImage,
         badge: formData.badge?.trim() || null,
         description: formData.description?.trim() || '',
-        sizes: formData.sizes,
-        colors: formData.colors,
-        is_active: formData.is_active
+        sizes: formData.sizes && formData.sizes.length > 0 ? formData.sizes : ['S', 'M', 'L', 'XL'],
+        colors: formData.colors || [],
+        is_active: formData.is_active ?? true
       };
 
       if (editingProduct) {
