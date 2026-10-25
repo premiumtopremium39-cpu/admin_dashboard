@@ -12,7 +12,10 @@ import {
   Eye,
   EyeOff,
   Layers,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Camera,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { supabase, uploadGarmentPhoto, deleteGarmentPhoto } from '../supabaseClient';
 import { getOptimizedImageUrl, FALLBACK_GARMENT_IMAGES } from '../utils/imageOptimizer';
@@ -24,6 +27,8 @@ export default function ProductManagement({ products = [], onRefresh }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [expandedColorIdx, setExpandedColorIdx] = useState(null);
+  const [uploadingAngleKey, setUploadingAngleKey] = useState(null);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
 
@@ -121,7 +126,22 @@ export default function ProductManagement({ products = [], onRefresh }) {
   const handleAddColor = () => {
     setFormData(prev => ({
       ...prev,
-      colors: [...prev.colors, { name: 'Sage Green', hex: '#7c8e76', stock: 5 }]
+      colors: [
+        ...prev.colors,
+        {
+          name: 'Olive Linen',
+          hex: '#556B2F',
+          stock: 5,
+          image: prev.image || '',
+          views: [
+            { name: 'Front View', url: prev.image || '' },
+            { name: 'Back Side', url: prev.image || '' },
+            { name: 'Left Side View', url: prev.image || '' },
+            { name: 'Button View', url: prev.image || '' },
+            { name: 'Right Side View', url: prev.image || '' }
+          ]
+        }
+      ]
     }));
   };
 
@@ -130,6 +150,42 @@ export default function ProductManagement({ products = [], onRefresh }) {
       ...prev,
       colors: prev.colors.filter((_, i) => i !== index)
     }));
+    if (expandedColorIdx === index) setExpandedColorIdx(null);
+  };
+
+  const handleAngleViewChange = (colorIdx, viewIdx, url) => {
+    const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
+    const updated = [...formData.colors];
+    const currentColor = updated[colorIdx] || {};
+    let views = Array.isArray(currentColor.views) && currentColor.views.length > 0
+      ? [...currentColor.views]
+      : defaultAngleNames.map(name => ({ name, url: currentColor.image || formData.image || '' }));
+
+    views[viewIdx] = {
+      name: views[viewIdx]?.name || defaultAngleNames[viewIdx],
+      url: url
+    };
+
+    updated[colorIdx] = {
+      ...currentColor,
+      image: viewIdx === 0 && url ? url : (currentColor.image || url),
+      views: views
+    };
+    setFormData(prev => ({ ...prev, colors: updated }));
+  };
+
+  const handleAngleFileUpload = async (colorIdx, viewIdx, file) => {
+    if (!file) return;
+    const key = `${colorIdx}-${viewIdx}`;
+    setUploadingAngleKey(key);
+    try {
+      const publicUrl = await uploadGarmentPhoto(file);
+      handleAngleViewChange(colorIdx, viewIdx, publicUrl);
+    } catch (err) {
+      alert(`Angle photo upload error: ${err.message}`);
+    } finally {
+      setUploadingAngleKey(null);
+    }
   };
 
   const handleSaveProduct = async (e) => {
@@ -685,40 +741,194 @@ export default function ProductManagement({ products = [], onRefresh }) {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {formData.colors.map((c, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input
-                        type="color"
-                        value={c.hex || '#000000'}
-                        onChange={(e) => handleColorChange(idx, 'hex', e.target.value)}
-                        style={{ width: '38px', height: '36px', borderRadius: '6px', border: 'none', background: 'transparent', cursor: 'pointer' }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Color Name (e.g. Monaco Navy)"
-                        value={c.name}
-                        onChange={(e) => handleColorChange(idx, 'name', e.target.value)}
-                        className="luxury-input"
-                        style={{ flex: 2, height: '36px' }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Stock"
-                        value={c.stock}
-                        onChange={(e) => handleColorChange(idx, 'stock', Number(e.target.value))}
-                        className="luxury-input"
-                        style={{ flex: 1, height: '36px' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveColor(idx)}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px' }}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {formData.colors.map((c, idx) => {
+                    const isExpanded = expandedColorIdx === idx;
+                    const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
+                    const currentViews = Array.isArray(c.views) && c.views.length > 0
+                      ? c.views
+                      : defaultAngleNames.map(name => ({ name, url: c.image || formData.image || '' }));
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          border: isExpanded ? '1px solid var(--accent-gold)' : '1px solid var(--border-subtle)',
+                          borderRadius: '10px',
+                          padding: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input
+                            type="color"
+                            value={c.hex || '#000000'}
+                            onChange={(e) => handleColorChange(idx, 'hex', e.target.value)}
+                            style={{ width: '38px', height: '36px', borderRadius: '6px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Color Name (e.g. Monaco Navy)"
+                            value={c.name}
+                            onChange={(e) => handleColorChange(idx, 'name', e.target.value)}
+                            className="luxury-input"
+                            style={{ flex: 2, height: '36px' }}
+                          />
+                          <input
+                            type="number"
+                            placeholder="Stock"
+                            value={c.stock}
+                            onChange={(e) => handleColorChange(idx, 'stock', Number(e.target.value))}
+                            className="luxury-input"
+                            style={{ flex: 1, height: '36px' }}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedColorIdx(isExpanded ? null : idx)}
+                            style={{
+                              background: isExpanded ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.04)',
+                              border: '1px solid var(--border-subtle)',
+                              color: isExpanded ? 'var(--text-gold)' : 'var(--text-secondary)',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                            title="Manage 5 angle photoshoot views for this color"
+                          >
+                            <Camera size={13} />
+                            <span>5 Angles</span>
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveColor(idx)}
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px' }}
+                            title="Remove color variant"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+
+                        {/* Collapsible 5 Angle Views for this Color */}
+                        {isExpanded && (
+                          <div style={{
+                            padding: '12px',
+                            background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '8px',
+                            border: '1px dashed var(--border-subtle)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                5-Angle Lookbook Photos ({c.name || 'Variant'})
+                              </span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                Syncs to Quick View & PDP
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                              {defaultAngleNames.map((angleName, vIdx) => {
+                                const viewObj = currentViews[vIdx] || { name: angleName, url: '' };
+                                const isAngleUploading = uploadingAngleKey === `${idx}-${vIdx}`;
+
+                                return (
+                                  <div
+                                    key={angleName}
+                                    style={{
+                                      background: 'rgba(255,255,255,0.02)',
+                                      border: '1px solid var(--border-subtle)',
+                                      borderRadius: '6px',
+                                      padding: '8px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '6px'
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                                      {angleName}
+                                    </span>
+
+                                    <div style={{
+                                      width: '100%',
+                                      height: '80px',
+                                      borderRadius: '4px',
+                                      background: '#07090e',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      overflow: 'hidden',
+                                      border: '1px solid var(--border-subtle)'
+                                    }}>
+                                      {viewObj.url ? (
+                                        <img
+                                          src={viewObj.url}
+                                          alt={angleName}
+                                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                      ) : (
+                                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>No Photo</span>
+                                      )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                      <label
+                                        className="secondary-btn"
+                                        style={{
+                                          flex: 1,
+                                          height: '26px',
+                                          fontSize: '10px',
+                                          padding: '0 4px',
+                                          cursor: isAngleUploading ? 'wait' : 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center'
+                                        }}
+                                      >
+                                        <Upload size={10} style={{ marginRight: '4px' }} />
+                                        <span>{isAngleUploading ? '...' : 'Upload'}</span>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          disabled={isAngleUploading}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleAngleFileUpload(idx, vIdx, file);
+                                          }}
+                                          style={{ display: 'none' }}
+                                        />
+                                      </label>
+                                    </div>
+
+                                    <input
+                                      type="url"
+                                      placeholder="Or CDN URL..."
+                                      value={viewObj.url || ''}
+                                      onChange={(e) => handleAngleViewChange(idx, vIdx, e.target.value)}
+                                      className="luxury-input"
+                                      style={{ height: '24px', fontSize: '10px', padding: '2px 6px' }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
