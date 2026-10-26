@@ -28,9 +28,8 @@ export default function ProductManagement({ products = [], onRefresh }) {
   const [editingProduct, setEditingProduct] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [expandedColorIdx, setExpandedColorIdx] = useState(null);
-  const [uploadingAngleKey, setUploadingAngleKey] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
+  const [uploadingMainAngleKey, setUploadingMainAngleKey] = useState(null);
+  const [showMainAngles, setShowMainAngles] = useState(true);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -39,6 +38,13 @@ export default function ProductManagement({ products = [], onRefresh }) {
     price: '',
     stock: 25,
     image: '',
+    views: [
+      { name: 'Front View', url: '' },
+      { name: 'Back Side', url: '' },
+      { name: 'Left Side View', url: '' },
+      { name: 'Button View', url: '' },
+      { name: 'Right Side View', url: '' }
+    ],
     badge: 'Italian Luxury',
     description: '',
     sizes: ['S', 'M', 'L', 'XL'],
@@ -51,20 +57,60 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
+  const defaultAngleLabels = [
+    { key: 'front', label: 'Front View' },
+    { key: 'back', label: 'Back Side' },
+    { key: 'left', label: 'Left Side View' },
+    { key: 'button', label: 'Button View' },
+    { key: 'right', label: 'Right Side View' }
+  ];
+
   const handleOpenAdd = () => {
     setEditingProduct(null);
+    setShowMainAngles(true);
     setFormData({
       title: '',
       category: 'Linen Shirts',
       price: '',
       stock: 20,
       image: '',
+      views: [
+        { name: 'Front View', url: '' },
+        { name: 'Back Side', url: '' },
+        { name: 'Left Side View', url: '' },
+        { name: 'Button View', url: '' },
+        { name: 'Right Side View', url: '' }
+      ],
       badge: 'Italian Luxury',
       description: 'Crafted from 100% Normandy flax linen. Features bespoke mother-of-pearl buttons and tailored French seams.',
       sizes: ['S', 'M', 'L', 'XL'],
       colors: [
-        { name: 'Pure Ivory', hex: '#fdfbf7', stock: 10 },
-        { name: 'Sardinia Navy', hex: '#1a2942', stock: 10 }
+        {
+          name: 'Pure Ivory',
+          hex: '#fdfbf7',
+          stock: 10,
+          image: '',
+          views: [
+            { name: 'Front View', url: '' },
+            { name: 'Back Side', url: '' },
+            { name: 'Left Side View', url: '' },
+            { name: 'Button View', url: '' },
+            { name: 'Right Side View', url: '' }
+          ]
+        },
+        {
+          name: 'Sardinia Navy',
+          hex: '#1a2942',
+          stock: 10,
+          image: '',
+          views: [
+            { name: 'Front View', url: '' },
+            { name: 'Back Side', url: '' },
+            { name: 'Left Side View', url: '' },
+            { name: 'Button View', url: '' },
+            { name: 'Right Side View', url: '' }
+          ]
+        }
       ],
       is_active: true
     });
@@ -73,12 +119,33 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
   const handleOpenEdit = (product) => {
     setEditingProduct(product);
+    setShowMainAngles(true);
+    // Extract existing product views or fallback to first color views or main image
+    const existingViews = Array.isArray(product.views) && product.views.length > 0
+      ? product.views
+      : (product.colors?.[0]?.views && Array.isArray(product.colors[0].views) && product.colors[0].views.length > 0)
+        ? product.colors[0].views
+        : [
+            { name: 'Front View', url: product.image || '' },
+            { name: 'Back Side', url: '' },
+            { name: 'Left Side View', url: '' },
+            { name: 'Button View', url: '' },
+            { name: 'Right Side View', url: '' }
+          ];
+
     setFormData({
       title: product.title || '',
       category: product.category || 'Linen Shirts',
       price: product.price || '',
       stock: product.stock ?? 0,
       image: product.image || '',
+      views: [
+        { name: 'Front View', url: existingViews[0]?.url || product.image || '' },
+        { name: 'Back Side', url: existingViews[1]?.url || '' },
+        { name: 'Left Side View', url: existingViews[2]?.url || '' },
+        { name: 'Button View', url: existingViews[3]?.url || '' },
+        { name: 'Right Side View', url: existingViews[4]?.url || '' }
+      ],
       badge: product.badge || '',
       description: product.description || '',
       sizes: Array.isArray(product.sizes) ? product.sizes : ['S', 'M', 'L', 'XL'],
@@ -97,13 +164,66 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
     try {
       const publicUrl = await uploadGarmentPhoto(file);
-      setFormData((prev) => ({ ...prev, image: publicUrl }));
+      setFormData((prev) => {
+        const nextViews = Array.isArray(prev.views) && prev.views.length > 0 ? [...prev.views] : [
+          { name: 'Front View', url: '' },
+          { name: 'Back Side', url: '' },
+          { name: 'Left Side View', url: '' },
+          { name: 'Button View', url: '' },
+          { name: 'Right Side View', url: '' }
+        ];
+        // If front view is empty, set it
+        if (!nextViews[0]?.url) {
+          nextViews[0] = { name: 'Front View', url: publicUrl };
+        }
+        return {
+          ...prev,
+          image: publicUrl,
+          views: nextViews
+        };
+      });
       setStatusMessage({ type: 'success', text: "Garment photo uploaded successfully to 'garment-photos' bucket!" });
     } catch (err) {
       console.error(err);
       setStatusMessage({ type: 'error', text: err.message || 'Image upload failed. You can paste an image URL directly.' });
     } finally {
       setUploadingImage(false);
+    }
+  };
+
+  const handleMainAngleChange = (viewIdx, url) => {
+    setFormData(prev => {
+      const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
+      const nextViews = Array.isArray(prev.views) && prev.views.length > 0
+        ? [...prev.views]
+        : defaultAngleNames.map(name => ({ name, url: '' }));
+
+      nextViews[viewIdx] = {
+        name: nextViews[viewIdx]?.name || defaultAngleNames[viewIdx],
+        url: url
+      };
+
+      // Also sync primary image if Front View changed
+      const nextImage = viewIdx === 0 && url ? url : (prev.image || url);
+
+      return {
+        ...prev,
+        image: nextImage,
+        views: nextViews
+      };
+    });
+  };
+
+  const handleMainAngleUpload = async (viewIdx, file) => {
+    if (!file) return;
+    setUploadingMainAngleKey(viewIdx);
+    try {
+      const publicUrl = await uploadGarmentPhoto(file);
+      handleMainAngleChange(viewIdx, publicUrl);
+    } catch (err) {
+      alert(`Angle photo upload error: ${err.message}`);
+    } finally {
+      setUploadingMainAngleKey(null);
     }
   };
 
@@ -200,11 +320,27 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
     try {
       // Default to luxury curated linen fallback if no photo was uploaded or pasted
-      const finalImage = formData.image?.trim() || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=600';
+      // Clean & ensure 5 standard angles for product views
+      const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
+      const productViews = defaultAngleNames.map((name, i) => {
+        const found = formData.views?.[i];
+        return {
+          name: found?.name || name,
+          url: found?.url || (i === 0 ? finalImage : '')
+        };
+      });
 
       // Ensure all color variants have the product image and views set
       const formattedColors = (formData.colors || []).map(c => {
         const colorImg = c.image || finalImage;
+        const colorViews = defaultAngleNames.map((name, i) => {
+          const found = c.views?.[i];
+          return {
+            name: found?.name || name,
+            url: found?.url || (i === 0 ? colorImg : (productViews[i]?.url || colorImg))
+          };
+        });
+
         return {
           ...c,
           name: c.name || 'Default',
@@ -212,13 +348,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
           hex: c.hex || c.code || '#FFFFFF',
           stock: Number(c.stock !== undefined ? c.stock : 10),
           image: colorImg,
-          views: c.views && c.views.length > 0 ? c.views : [
-            { name: "Front View", url: colorImg },
-            { name: "Back Side", url: colorImg },
-            { name: "Left Side View", url: colorImg },
-            { name: "Button View", url: colorImg },
-            { name: "Right Side View", url: colorImg }
-          ]
+          views: colorViews
         };
       });
 
@@ -228,6 +358,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock, 10) || 0,
         image: finalImage,
+        views: productViews,
         badge: formData.badge?.trim() || null,
         description: formData.description?.trim() || '',
         sizes: formData.sizes && formData.sizes.length > 0 ? formData.sizes : ['S', 'M', 'L', 'XL'],
@@ -631,7 +762,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <label className="secondary-btn" style={{ cursor: uploadingImage ? 'wait' : 'pointer', fontSize: '12px' }}>
                         <Upload size={14} />
-                        <span>{uploadingImage ? 'Uploading to Supabase...' : 'Select File to Upload'}</span>
+                        <span>{uploadingImage ? 'Uploading to Supabase...' : 'Select Main Photo to Upload'}</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -645,10 +776,145 @@ export default function ProductManagement({ products = [], onRefresh }) {
                       type="url"
                       placeholder="Or paste public Image CDN URL directly..."
                       value={formData.image}
-                      onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                      onChange={(e) => {
+                        const url = e.target.value;
+                        setFormData((prev) => {
+                          const nextViews = Array.isArray(prev.views) ? [...prev.views] : [];
+                          if (!nextViews[0]?.url) nextViews[0] = { name: 'Front View', url };
+                          return { ...prev, image: url, views: nextViews };
+                        });
+                      }}
                       className="luxury-input"
                       style={{ fontSize: '12px', height: '34px' }}
                     />
+                  </div>
+                </div>
+
+                {/* 5-Angle Lookbook Photos: Front, Back, Left, Button, Right */}
+                <div style={{
+                  marginTop: '16px',
+                  paddingTop: '16px',
+                  borderTop: '1px dashed rgba(212, 175, 55, 0.25)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Camera size={14} color="var(--accent-gold)" />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-gold)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        5 Angle Views (Front, Back, Left, Button, Right)
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Upload one-by-one to sync with customer storefront
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                    {defaultAngleLabels.map((angle, vIdx) => {
+                      const viewObj = formData.views?.[vIdx] || { name: angle.label, url: '' };
+                      const isUploadingThis = uploadingMainAngleKey === vIdx;
+
+                      return (
+                        <div
+                          key={angle.key}
+                          style={{
+                            background: 'rgba(0, 0, 0, 0.35)',
+                            border: viewObj.url ? '1px solid rgba(212, 175, 55, 0.4)' : '1px solid var(--border-subtle)',
+                            borderRadius: '8px',
+                            padding: '10px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-gold)' }}>
+                              {angle.label}
+                            </span>
+                            {viewObj.url && <Check size={12} color="#10b981" />}
+                          </div>
+
+                          <div style={{
+                            width: '100%',
+                            height: '84px',
+                            borderRadius: '6px',
+                            background: '#07090e',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            border: '1px solid var(--border-subtle)',
+                            position: 'relative'
+                          }}>
+                            {viewObj.url ? (
+                              <img
+                                src={viewObj.url}
+                                alt={angle.label}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>No Photo</span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <label
+                              className="secondary-btn"
+                              style={{
+                                flex: 1,
+                                height: '26px',
+                                fontSize: '10px',
+                                padding: '0 6px',
+                                cursor: isUploadingThis ? 'wait' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Upload size={11} style={{ marginRight: '4px' }} />
+                              <span>{isUploadingThis ? 'Uploading...' : 'Upload'}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                disabled={isUploadingThis}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleMainAngleUpload(vIdx, file);
+                                }}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+
+                            {viewObj.url && (
+                              <button
+                                type="button"
+                                onClick={() => handleMainAngleChange(vIdx, '')}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.15)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  color: '#ef4444',
+                                  borderRadius: '4px',
+                                  padding: '0 6px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Clear photo"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+
+                          <input
+                            type="url"
+                            placeholder="Or CDN URL..."
+                            value={viewObj.url || ''}
+                            onChange={(e) => handleMainAngleChange(vIdx, e.target.value)}
+                            className="luxury-input"
+                            style={{ height: '24px', fontSize: '10px', padding: '2px 6px' }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
