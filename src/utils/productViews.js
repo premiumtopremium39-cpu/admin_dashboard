@@ -62,25 +62,15 @@ export function handleImageError(e, fallbackUrl = DEFAULT_FALLBACK_IMAGE) {
 export function getProductColorViews(product, colorName) {
   if (!product) return [{ name: "Front View", url: DEFAULT_FALLBACK_IMAGE }];
 
-  // 0. Check if product has explicit views array defined directly on product
-  if (Array.isArray(product.views) && product.views.length > 0 && product.views.some(v => v.url)) {
-    const defaultAngles = get5ViewsForSet('shirt');
-    return product.views.map((v, i) => ({
-      name: v.name || defaultAngles[i]?.name || 'Garment View',
-      url: v.url || product.image || defaultAngles[i]?.url || DEFAULT_FALLBACK_IMAGE
-    }));
-  }
-
-  // 1. Check if color has explicit 5 views configured
+  // 1. Check if color variant has explicit views configured
   if (product.colors && product.colors.length > 0) {
     const selectedColorObj = product.colors.find(c => 
       c.name?.toLowerCase() === colorName?.toLowerCase()
-    ) || product.colors[0];
+    ) || (colorName ? null : product.colors[0]);
 
     if (selectedColorObj?.views && Array.isArray(selectedColorObj.views) && selectedColorObj.views.length > 0 && selectedColorObj.views.some(v => v.url)) {
-      // If color or product has a custom uploaded front image, ensure primary view uses it
-      const primaryCustom = selectedColorObj.customImage || (selectedColorObj.image && !selectedColorObj.image.startsWith('/assets/shirt')) ? selectedColorObj.image : null;
-      if (primaryCustom && selectedColorObj.views[0]?.url !== primaryCustom) {
+      const primaryCustom = selectedColorObj.image || selectedColorObj.customImage;
+      if (primaryCustom && !selectedColorObj.views[0]?.url) {
         return [
           { name: selectedColorObj.views[0]?.name || "Front View", url: primaryCustom },
           ...selectedColorObj.views.slice(1)
@@ -89,32 +79,31 @@ export function getProductColorViews(product, colorName) {
       return selectedColorObj.views;
     }
 
-    // If color has an explicit image assigned, detect set prefix
     if (selectedColorObj?.image) {
       const img = selectedColorObj.image;
       const baseMatch = img.match(/(shirt_[a-z]+|shirt|set1|set2)/);
       if (baseMatch) {
         return get5ViewsForSet(baseMatch[1]);
       } else if (img.startsWith('data:') || img.startsWith('/') || img.startsWith('http')) {
-        // Custom upload image as single front view + default angles
         return [
           { name: "Front View", url: img },
           ...get5ViewsForSet('shirt').slice(1)
         ];
       }
     }
+  }
 
-    // If top-level custom uploaded image exists on product
-    const customTop = (product.image && (product.image.includes('supabase.co') || product.image.startsWith('http') || product.image.startsWith('data:'))) ? product.image : null;
-    if (customTop) {
-      return [
-        { name: 'Front View', url: customTop },
-        ...get5ViewsForSet('shirt').slice(1)
-      ];
-    }
+  // 2. Check if product has explicit views array defined directly on product
+  if (Array.isArray(product.views) && product.views.length > 0 && product.views.some(v => v.url)) {
+    const defaultAngles = get5ViewsForSet('shirt');
+    return product.views.map((v, i) => ({
+      name: v.name || defaultAngles[i]?.name || 'Garment View',
+      url: v.url || product.image || defaultAngles[i]?.url || DEFAULT_FALLBACK_IMAGE
+    }));
+  }
 
-    // 2. Intelligent keyword resolution for color names
-    const cName = (colorName || selectedColorObj?.name || '').toLowerCase();
+    // 3. Fallback color keyword resolution
+    const cName = (colorName || (product.colors && product.colors[0]?.name) || '').toLowerCase();
     if (cName.includes('navy')) {
       return get5ViewsForSet('shirt_navy');
     } else if (cName.includes('blue')) {
@@ -125,7 +114,7 @@ export function getProductColorViews(product, colorName) {
       return get5ViewsForSet('shirt_olive');
     } else if (cName.includes('beige') || cName.includes('oatmeal') || cName.includes('sand')) {
       return get5ViewsForSet('shirt_beige');
-    } else if (cName.includes('peach') || cName.includes('sunset') || cName.includes('terracotta')) {
+    } else if (cName.includes('peach') || cName.includes('sunset') || cName.includes('terracotta') || cName.includes('pink')) {
       return get5ViewsForSet('shirt_peach');
     } else if (cName.includes('charcoal') || cName.includes('grey') || cName.includes('gray') || cName.includes('slate')) {
       return get5ViewsForSet('shirt_charcoal');

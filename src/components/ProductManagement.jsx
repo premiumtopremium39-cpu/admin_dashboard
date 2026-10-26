@@ -15,11 +15,25 @@ import {
   Image as ImageIcon,
   Camera,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Ruler,
+  Sliders
 } from 'lucide-react';
 import { supabase, uploadGarmentPhoto, deleteGarmentPhoto } from '../supabaseClient';
 import { getOptimizedImageUrl, FALLBACK_GARMENT_IMAGES } from '../utils/imageOptimizer';
 import confetti from 'canvas-confetti';
+
+const DEFAULT_PRODUCT_SIZE_GUIDE = {
+  title: 'Garment Sizing Matrix',
+  subtitle: 'Measurements in inches. Tailored to luxury drape & fit.',
+  rows: [
+    { size: 'S', chest: '38" - 40"', shoulder: '17.5"', sleeve: '33.5"', length: '29.0"' },
+    { size: 'M', chest: '41" - 43"', shoulder: '18.2"', sleeve: '34.5"', length: '29.5"' },
+    { size: 'L', chest: '44" - 46"', shoulder: '19.0"', sleeve: '35.5"', length: '30.2"' },
+    { size: 'XL', chest: '47" - 49"', shoulder: '19.8"', sleeve: '36.5"', length: '31.0"' }
+  ],
+  fitNote: 'Fits true to tailored silhouette. For a looser resort fit, select one size up.'
+};
 
 export default function ProductManagement({ products = [], onRefresh }) {
   const [search, setSearch] = useState('');
@@ -27,12 +41,14 @@ export default function ProductManagement({ products = [], onRefresh }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingColorKey, setUploadingColorKey] = useState(null);
   const [uploadingAngleKey, setUploadingAngleKey] = useState(null);
   const [uploadingMainAngleKey, setUploadingMainAngleKey] = useState(null);
-  const [expandedColorIdx, setExpandedColorIdx] = useState(null);
+  const [expandedColorIdx, setExpandedColorIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [showMainAngles, setShowMainAngles] = useState(true);
+  const [showSizeGuideEditor, setShowSizeGuideEditor] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -48,12 +64,13 @@ export default function ProductManagement({ products = [], onRefresh }) {
       { name: 'Button View', url: '' },
       { name: 'Right Side View', url: '' }
     ],
+    size_guide: DEFAULT_PRODUCT_SIZE_GUIDE,
     badge: 'Italian Luxury',
     description: '',
     sizes: ['S', 'M', 'L', 'XL'],
     colors: [
-      { name: 'Pure White', hex: '#FFFFFF', stock: 10 },
-      { name: 'Obsidian Black', hex: '#111111', stock: 15 }
+      { name: 'Pure White', hex: '#FFFFFF', stock: 10, image: '', views: [] },
+      { name: 'Obsidian Black', hex: '#111111', stock: 15, image: '', views: [] }
     ],
     is_active: true
   });
@@ -84,6 +101,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
         { name: 'Button View', url: '' },
         { name: 'Right Side View', url: '' }
       ],
+      size_guide: DEFAULT_PRODUCT_SIZE_GUIDE,
       badge: 'Italian Luxury',
       description: 'Crafted from 100% Normandy flax linen. Features bespoke mother-of-pearl buttons and tailored French seams.',
       sizes: ['S', 'M', 'L', 'XL'],
@@ -117,12 +135,17 @@ export default function ProductManagement({ products = [], onRefresh }) {
       ],
       is_active: true
     });
+    setShowSizeGuideEditor(false);
+    setExpandedColorIdx(0);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (product) => {
     setEditingProduct(product);
     setShowMainAngles(true);
+    setShowSizeGuideEditor(false);
+    setExpandedColorIdx(0);
+
     // Extract existing product views or fallback to first color views or main image
     const existingViews = Array.isArray(product.views) && product.views.length > 0
       ? product.views
@@ -135,6 +158,18 @@ export default function ProductManagement({ products = [], onRefresh }) {
             { name: 'Button View', url: '' },
             { name: 'Right Side View', url: '' }
           ];
+
+    // Parse size_guide if stored as json or object
+    let parsedSizeGuide = DEFAULT_PRODUCT_SIZE_GUIDE;
+    if (product.size_guide) {
+      if (typeof product.size_guide === 'string') {
+        try {
+          parsedSizeGuide = JSON.parse(product.size_guide);
+        } catch {}
+      } else if (typeof product.size_guide === 'object') {
+        parsedSizeGuide = product.size_guide;
+      }
+    }
 
     setFormData({
       title: product.title || '',
@@ -149,6 +184,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
         { name: 'Button View', url: existingViews[3]?.url || '' },
         { name: 'Right Side View', url: existingViews[4]?.url || '' }
       ],
+      size_guide: parsedSizeGuide,
       badge: product.badge || '',
       description: product.description || '',
       sizes: Array.isArray(product.sizes) ? product.sizes : ['S', 'M', 'L', 'XL'],
@@ -276,6 +312,40 @@ export default function ProductManagement({ products = [], onRefresh }) {
     if (expandedColorIdx === index) setExpandedColorIdx(null);
   };
 
+  const handleColorMainImageChange = (colorIdx, url) => {
+    const updated = [...formData.colors];
+    const currentColor = updated[colorIdx] || {};
+    const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
+    let views = Array.isArray(currentColor.views) && currentColor.views.length > 0
+      ? [...currentColor.views]
+      : defaultAngleNames.map(name => ({ name, url: '' }));
+
+    // Set primary front view if not set or update it
+    if (!views[0]?.url) {
+      views[0] = { name: 'Front View', url: url };
+    }
+
+    updated[colorIdx] = {
+      ...currentColor,
+      image: url,
+      views: views
+    };
+    setFormData(prev => ({ ...prev, colors: updated }));
+  };
+
+  const handleColorMainImageUpload = async (colorIdx, file) => {
+    if (!file) return;
+    setUploadingColorKey(colorIdx);
+    try {
+      const publicUrl = await uploadGarmentPhoto(file);
+      handleColorMainImageChange(colorIdx, publicUrl);
+    } catch (err) {
+      alert(`Color main photo upload error: ${err.message}`);
+    } finally {
+      setUploadingColorKey(null);
+    }
+  };
+
   const handleAngleViewChange = (colorIdx, viewIdx, url) => {
     const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
     const updated = [...formData.colors];
@@ -309,6 +379,41 @@ export default function ProductManagement({ products = [], onRefresh }) {
     } finally {
       setUploadingAngleKey(null);
     }
+  };
+
+  // Size Guide Handlers
+  const handleSizeGuideRowChange = (index, field, value) => {
+    setFormData(prev => {
+      const currentGuide = prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE;
+      const rows = [...(currentGuide.rows || [])];
+      rows[index] = { ...rows[index], [field]: value };
+      return {
+        ...prev,
+        size_guide: { ...currentGuide, rows }
+      };
+    });
+  };
+
+  const handleAddSizeGuideRow = () => {
+    setFormData(prev => {
+      const currentGuide = prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE;
+      const rows = [...(currentGuide.rows || []), { size: 'XXL', chest: '50" - 52"', shoulder: '20.5"', sleeve: '37.5"', length: '31.8"' }];
+      return {
+        ...prev,
+        size_guide: { ...currentGuide, rows }
+      };
+    });
+  };
+
+  const handleRemoveSizeGuideRow = (index) => {
+    setFormData(prev => {
+      const currentGuide = prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE;
+      const rows = (currentGuide.rows || []).filter((_, i) => i !== index);
+      return {
+        ...prev,
+        size_guide: { ...currentGuide, rows }
+      };
+    });
   };
 
   const handleSaveProduct = async (e) => {
@@ -362,6 +467,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
         stock: parseInt(formData.stock, 10) || 0,
         image: finalImage,
         views: productViews,
+        size_guide: formData.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE,
         badge: formData.badge?.trim() || null,
         description: formData.description?.trim() || '',
         sizes: formData.sizes && formData.sizes.length > 0 ? formData.sizes : ['S', 'M', 'L', 'XL'],
@@ -1037,10 +1143,11 @@ export default function ProductManagement({ products = [], onRefresh }) {
                             value={c.hex || '#000000'}
                             onChange={(e) => handleColorChange(idx, 'hex', e.target.value)}
                             style={{ width: '38px', height: '36px', borderRadius: '6px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                            title="Pick variant color"
                           />
                           <input
                             type="text"
-                            placeholder="Color Name (e.g. Monaco Navy)"
+                            placeholder="Color Name (e.g. Light Pink, Navy)"
                             value={c.name}
                             onChange={(e) => handleColorChange(idx, 'name', e.target.value)}
                             className="luxury-input"
@@ -1055,26 +1162,40 @@ export default function ProductManagement({ products = [], onRefresh }) {
                             style={{ flex: 1, height: '36px' }}
                           />
 
+                          {/* Quick Color Main Image Thumbnail */}
+                          {c.image ? (
+                            <img
+                              src={c.image}
+                              alt={c.name}
+                              style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--border-gold)' }}
+                              title="Current main photo for this color"
+                            />
+                          ) : (
+                            <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                              <ImageIcon size={14} />
+                            </div>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => setExpandedColorIdx(isExpanded ? null : idx)}
                             style={{
                               background: isExpanded ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.04)',
-                              border: '1px solid var(--border-subtle)',
+                              border: isExpanded ? '1px solid var(--accent-gold)' : '1px solid var(--border-subtle)',
                               color: isExpanded ? 'var(--text-gold)' : 'var(--text-secondary)',
                               borderRadius: '6px',
-                              padding: '6px 10px',
+                              padding: '6px 12px',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px',
                               fontSize: '11px',
-                              fontWeight: 600,
+                              fontWeight: 700,
                               cursor: 'pointer'
                             }}
-                            title="Manage 5 angle photoshoot views for this color"
+                            title="Manage Main Image & 5 Angle Photos for this Color"
                           >
                             <Camera size={13} />
-                            <span>5 Angles</span>
+                            <span>Color Photos ({currentViews.filter(v => v.url).length}/5)</span>
                             {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                           </button>
 
@@ -1088,23 +1209,97 @@ export default function ProductManagement({ products = [], onRefresh }) {
                           </button>
                         </div>
 
-                        {/* Collapsible 5 Angle Views for this Color */}
+                        {/* Collapsible Main Image & 5 Angle Views for this specific Color */}
                         {isExpanded && (
                           <div style={{
-                            padding: '12px',
-                            background: 'rgba(0,0,0,0.2)',
+                            padding: '14px',
+                            background: 'rgba(0,0,0,0.3)',
                             borderRadius: '8px',
-                            border: '1px dashed var(--border-subtle)',
+                            border: '1px dashed rgba(212, 175, 55, 0.3)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '8px'
+                            gap: '12px'
                           }}>
+                            {/* Color Primary / Main Image */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 12px',
+                              background: 'rgba(212, 175, 55, 0.05)',
+                              border: '1px solid rgba(212, 175, 55, 0.2)',
+                              borderRadius: '6px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '42px',
+                                  height: '42px',
+                                  borderRadius: '6px',
+                                  background: '#07090e',
+                                  overflow: 'hidden',
+                                  border: '1px solid var(--border-gold)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  {c.image ? (
+                                    <img src={c.image} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <ImageIcon size={18} color="var(--text-muted)" />
+                                  )}
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-gold)' }}>
+                                    MAIN COVER PHOTO: {c.name ? c.name.toUpperCase() : 'VARIANT'}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                    Displays as storefront swatch thumbnail & primary front view
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <label
+                                  className="secondary-btn"
+                                  style={{
+                                    height: '28px',
+                                    fontSize: '11px',
+                                    padding: '0 10px',
+                                    cursor: uploadingColorKey === idx ? 'wait' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <Upload size={12} style={{ marginRight: '5px' }} />
+                                  <span>{uploadingColorKey === idx ? 'Uploading...' : 'Upload Main Photo'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={uploadingColorKey === idx}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleColorMainImageUpload(idx, file);
+                                    }}
+                                    style={{ display: 'none' }}
+                                  />
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="Or paste CDN URL..."
+                                  value={c.image || ''}
+                                  onChange={(e) => handleColorMainImageChange(idx, e.target.value)}
+                                  className="luxury-input"
+                                  style={{ width: '160px', height: '28px', fontSize: '11px', padding: '2px 8px' }}
+                                />
+                              </div>
+                            </div>
+
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                5-Angle Lookbook Photos ({c.name || 'Variant'})
+                                5 Angle Views for {c.name || 'this color'} (Front, Back, Left, Button, Right)
                               </span>
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                Syncs to Quick View & PDP
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                Shows in customer gallery when buyer selects this color
                               </span>
                             </div>
 
@@ -1118,7 +1313,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
                                     key={angleName}
                                     style={{
                                       background: 'rgba(255,255,255,0.02)',
-                                      border: '1px solid var(--border-subtle)',
+                                      border: viewObj.url ? '1px solid rgba(212, 175, 55, 0.4)' : '1px solid var(--border-subtle)',
                                       borderRadius: '6px',
                                       padding: '8px',
                                       display: 'flex',
@@ -1126,9 +1321,12 @@ export default function ProductManagement({ products = [], onRefresh }) {
                                       gap: '6px'
                                     }}
                                   >
-                                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                                      {angleName}
-                                    </span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                                        {angleName}
+                                      </span>
+                                      {viewObj.url && <Check size={11} color="#10b981" />}
+                                    </div>
 
                                     <div style={{
                                       width: '100%',
@@ -1179,6 +1377,25 @@ export default function ProductManagement({ products = [], onRefresh }) {
                                           style={{ display: 'none' }}
                                         />
                                       </label>
+
+                                      {viewObj.url && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAngleViewChange(idx, vIdx, '')}
+                                          style={{
+                                            background: 'rgba(239, 68, 68, 0.15)',
+                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                            color: '#ef4444',
+                                            borderRadius: '4px',
+                                            padding: '0 4px',
+                                            fontSize: '10px',
+                                            cursor: 'pointer'
+                                          }}
+                                          title="Clear photo"
+                                        >
+                                          <X size={11} />
+                                        </button>
+                                      )}
                                     </div>
 
                                     <input
@@ -1199,6 +1416,186 @@ export default function ProductManagement({ products = [], onRefresh }) {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Product-Specific Size Guide Chart Editor */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border-gold)',
+                borderRadius: '12px',
+                padding: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Ruler size={16} color="var(--accent-gold)" />
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-gold)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        Product Size Guide Chart
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Custom measurements for this product. Syncs directly to Storefront Size Guide modal.
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSizeGuideEditor(!showSizeGuideEditor)}
+                    style={{
+                      background: showSizeGuideEditor ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-subtle)',
+                      color: showSizeGuideEditor ? 'var(--text-gold)' : 'var(--text-secondary)',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Sliders size={12} />
+                    <span>{showSizeGuideEditor ? 'Hide Sizing Matrix' : 'Edit Sizing Matrix'}</span>
+                    {showSizeGuideEditor ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                </div>
+
+                {showSizeGuideEditor && (
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                          CHART TITLE
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.size_guide?.title || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), title: e.target.value }
+                          }))}
+                          className="luxury-input"
+                          style={{ height: '32px', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                          SUBTITLE / FIT ADVISORY
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.size_guide?.subtitle || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), subtitle: e.target.value }
+                          }))}
+                          className="luxury-input"
+                          style={{ height: '32px', fontSize: '12px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Sizing Rows Table */}
+                    <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11px' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-subtle)' }}>
+                            <th style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>SIZE</th>
+                            <th style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>CHEST</th>
+                            <th style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>SHOULDER</th>
+                            <th style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>SLEEVE</th>
+                            <th style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>LENGTH</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>ACTION</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(formData.size_guide?.rows || DEFAULT_PRODUCT_SIZE_GUIDE.rows).map((row, rIdx) => (
+                            <tr key={rIdx} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                              <td style={{ padding: '6px 10px' }}>
+                                <input
+                                  type="text"
+                                  value={row.size || ''}
+                                  onChange={(e) => handleSizeGuideRowChange(rIdx, 'size', e.target.value)}
+                                  className="luxury-input"
+                                  style={{ height: '28px', width: '60px', fontWeight: 700 }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 10px' }}>
+                                <input
+                                  type="text"
+                                  value={row.chest || ''}
+                                  onChange={(e) => handleSizeGuideRowChange(rIdx, 'chest', e.target.value)}
+                                  className="luxury-input"
+                                  style={{ height: '28px' }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 10px' }}>
+                                <input
+                                  type="text"
+                                  value={row.shoulder || ''}
+                                  onChange={(e) => handleSizeGuideRowChange(rIdx, 'shoulder', e.target.value)}
+                                  className="luxury-input"
+                                  style={{ height: '28px' }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 10px' }}>
+                                <input
+                                  type="text"
+                                  value={row.sleeve || ''}
+                                  onChange={(e) => handleSizeGuideRowChange(rIdx, 'sleeve', e.target.value)}
+                                  className="luxury-input"
+                                  style={{ height: '28px' }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 10px' }}>
+                                <input
+                                  type="text"
+                                  value={row.length || ''}
+                                  onChange={(e) => handleSizeGuideRowChange(rIdx, 'length', e.target.value)}
+                                  className="luxury-input"
+                                  style={{ height: '28px' }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSizeGuideRow(rIdx)}
+                                  style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                  title="Remove size row"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={handleAddSizeGuideRow}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-gold)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        + Add Size Measurement Row
+                      </button>
+
+                      <input
+                        type="text"
+                        placeholder="Fit Recommendation Note (e.g. Fits true to size...)"
+                        value={formData.size_guide?.fitNote || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), fitNote: e.target.value }
+                        }))}
+                        className="luxury-input"
+                        style={{ height: '30px', fontSize: '11px', width: '65%' }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
