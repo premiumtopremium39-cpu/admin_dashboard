@@ -428,6 +428,8 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
     try {
       // Default to luxury curated linen fallback if no photo was uploaded or pasted
+      const finalImage = formData.image?.trim() || formData.views?.[0]?.url?.trim() || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=600';
+
       // Clean & ensure 5 standard angles for product views
       const defaultAngleNames = ['Front View', 'Back Side', 'Left Side View', 'Button View', 'Right Side View'];
       const productViews = defaultAngleNames.map((name, i) => {
