@@ -27,8 +27,11 @@ export default function ProductManagement({ products = [], onRefresh }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [expandedColorIdx, setExpandedColorIdx] = useState(null);
+  const [uploadingAngleKey, setUploadingAngleKey] = useState(null);
   const [uploadingMainAngleKey, setUploadingMainAngleKey] = useState(null);
+  const [expandedColorIdx, setExpandedColorIdx] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [showMainAngles, setShowMainAngles] = useState(true);
 
   // Form State
