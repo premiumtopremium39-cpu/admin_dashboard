@@ -32,7 +32,10 @@ const DEFAULT_PRODUCT_SIZE_GUIDE = {
     { size: 'L', chest: '44" - 46"', shoulder: '19.0"', sleeve: '35.5"', length: '30.2"' },
     { size: 'XL', chest: '47" - 49"', shoulder: '19.8"', sleeve: '36.5"', length: '31.0"' }
   ],
-  fitNote: 'Fits true to tailored silhouette. For a looser resort fit, select one size up.'
+  fitNote: 'Fits true to tailored silhouette. For a looser resort fit, select one size up.',
+  details_fit: '',
+  materials_care: '',
+  shipping_returns: ''
 };
 
 export default function ProductManagement({ products = [], onRefresh }) {
@@ -493,6 +496,19 @@ export default function ProductManagement({ products = [], onRefresh }) {
           .from('products')
           .insert([payload]);
         if (error) throw error;
+      }
+
+      // Also publish to announcements (id: 2) so storefront global size guide modal updates in real-time
+      if (payload.size_guide) {
+        try {
+          await supabase.from('announcements').upsert({
+            id: 2,
+            message: JSON.stringify(payload.size_guide),
+            active: true
+          });
+        } catch (annErr) {
+          console.warn('Announcements size guide sync notice:', annErr);
+        }
       }
 
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
@@ -1595,6 +1611,68 @@ export default function ProductManagement({ products = [], onRefresh }) {
                         className="luxury-input"
                         style={{ height: '30px', fontSize: '11px', width: '65%' }}
                       />
+                    </div>
+
+                    {/* Product Tabs: Details & Fit, Materials & Care, Shipping & Returns */}
+                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed var(--border-subtle)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-gold)', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                        PRODUCT DETAIL TABS (STOREFRONT SPECIFICATIONS)
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                            <span>DETAILS & FIT</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-subtle)' }}>Leave blank or empty to use default</span>
+                          </label>
+                          <textarea
+                            placeholder="Default: Designed for a relaxed resort fit. Finished with genuine mother-of-pearl buttons and clean French seams. Fits true to size."
+                            value={formData.size_guide?.details_fit || ''}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), details_fit: e.target.value }
+                            }))}
+                            className="luxury-input"
+                            rows={2}
+                            style={{ width: '100%', fontSize: '12px', padding: '8px', resize: 'vertical' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                            <span>MATERIALS & CARE</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-subtle)' }}>Leave blank or empty to use default</span>
+                          </label>
+                          <textarea
+                            placeholder="Default: 100% traceably sourced organic European flax. Pre-washed with volcanic pumice. Machine wash cold on gentle cycle and hang dry in shade."
+                            value={formData.size_guide?.materials_care || ''}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), materials_care: e.target.value }
+                            }))}
+                            className="luxury-input"
+                            rows={2}
+                            style={{ width: '100%', fontSize: '12px', padding: '8px', resize: 'vertical' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                            <span>SHIPPING & RETURNS</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-subtle)' }}>Leave blank or empty to use default</span>
+                          </label>
+                          <textarea
+                            placeholder="Default: Complimentary worldwide express shipping on orders over ₹1,500. Duties and local taxes covered. 30-day returns accepted in original condition."
+                            value={formData.size_guide?.shipping_returns || ''}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              size_guide: { ...(prev.size_guide || DEFAULT_PRODUCT_SIZE_GUIDE), shipping_returns: e.target.value }
+                            }))}
+                            className="luxury-input"
+                            rows={2}
+                            style={{ width: '100%', fontSize: '12px', padding: '8px', resize: 'vertical' }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
