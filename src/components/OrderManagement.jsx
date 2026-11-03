@@ -244,6 +244,78 @@ export default function OrderManagement({ orders = [], onRefresh }) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Courier & Dispatch Tracking Controls */}
+              <div style={{ background: 'rgba(212,175,55,0.06)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-gold)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-gold)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Truck size={15} />
+                    <span>Courier & Logistics Dispatch</span>
+                  </div>
+                  <span className="badge" style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', color: '#fff' }}>
+                    Current: <strong>{selectedOrder.order_status}</strong>
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      Courier Partner
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={selectedOrder.carrier || 'Shadowfax'}
+                      id={`carrier_input_${selectedOrder.order_id}`}
+                      placeholder="e.g. Shadowfax, DTDC, BlueDart"
+                      className="luxury-input"
+                      style={{ height: '36px', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      AWB / Tracking Number *
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={selectedOrder.tracking_number || ''}
+                      id={`awb_input_${selectedOrder.order_id}`}
+                      placeholder="e.g. SFX9876543210"
+                      className="luxury-input"
+                      style={{ height: '36px', fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  <button
+                    onClick={() => {
+                      const carrier = document.getElementById(`carrier_input_${selectedOrder.order_id}`)?.value || 'Shadowfax';
+                      const awb = document.getElementById(`awb_input_${selectedOrder.order_id}`)?.value;
+                      handleUpdateTracking(selectedOrder.order_id, carrier, awb);
+                    }}
+                    className="gold-btn"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                  >
+                    Save & Mark Dispatched to Shadowfax
+                  </button>
+
+                  <button
+                    onClick={() => handleUpdateStatus(selectedOrder.order_id, 'Preparation')}
+                    className="secondary-btn"
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                  >
+                    Mark Prepared (Atelier)
+                  </button>
+
+                  <button
+                    onClick={() => handleUpdateStatus(selectedOrder.order_id, 'Delivered')}
+                    className="secondary-btn"
+                    style={{ fontSize: '12px', padding: '6px 12px', borderColor: 'var(--status-success)', color: 'var(--status-success)' }}
+                  >
+                    <CheckCircle size={14} style={{ marginRight: '4px' }} /> Mark Delivered to Customer
+                  </button>
+                </div>
+              </div>
+
               {/* Client & Shipping */}
               <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-gold)', textTransform: 'uppercase', marginBottom: '10px' }}>
