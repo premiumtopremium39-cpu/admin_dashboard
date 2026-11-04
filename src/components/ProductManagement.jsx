@@ -56,7 +56,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
   // Form State
   const [formData, setFormData] = useState({
     title: '',
-    category: 'With Collar',
+    category: 'With Pocket',
     price: '',
     stock: 25,
     image: '',
@@ -93,7 +93,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
     setShowMainAngles(true);
     setFormData({
       title: '',
-      category: 'With Collar',
+      category: 'With Pocket',
       price: '',
       stock: 20,
       image: '',
@@ -176,7 +176,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
     setFormData({
       title: product.title || '',
-      category: product.category || 'With Collar',
+      category: product.category || 'With Pocket',
       price: product.price || '',
       stock: product.stock ?? 0,
       image: product.image || '',
@@ -467,7 +467,7 @@ export default function ProductManagement({ products = [], onRefresh }) {
 
       const payload = {
         title: formData.title.trim(),
-        category: formData.category || 'With Collar',
+        category: formData.category || 'With Pocket',
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock, 10) || 0,
         image: finalImage,
@@ -821,9 +821,11 @@ export default function ProductManagement({ products = [], onRefresh }) {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="luxury-select"
                   >
+                    <option value="With Pocket">With Pocket</option>
+                    <option value="Without Pocket">Without Pocket</option>
+                    <option value="Accessories">Accessories</option>
                     <option value="With Collar">With Collar</option>
                     <option value="Without Collar">Without Collar</option>
-                    <option value="Accessories">Accessories</option>
                     <option value="Tuxedos & Suits">Tuxedos & Suits</option>
                     <option value="Trousers">Trousers</option>
                     <option value="Blazers">Blazers</option>
